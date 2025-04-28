@@ -1,0 +1,37 @@
+% simulacion respuesta de un circuito RLC a una entrada cuadrada 
+
+clc; clear; close all;
+
+R = 47;          % resistencia en ohms 
+L = 1e-6;        % bobina en henrios
+C = 100e-9;      % capacitor en faradios
+f = 500;         % frecuencia en hz                          
+Vp = 12;         % tension en volts        
+
+%  matrices del modelo en espacio de estados
+% las variables de estado son:
+% x1 = corriente i(t)
+% x2 = tensión en el capacitor vc(t)
+
+A = [-R/L, -1/L;
+      1/C,  0];
+
+B = [1/L; 
+      0];
+
+C = [0 1];      % para medir la tensión en el capacitor (x2)
+D = 0;      
+
+sys = ss(A, B, C, D);      % crea el sistema en espacio de estados
+
+t = 0:1e-5:0.01;          % tiempo de 0 a 0.01 segundos, cada 1 microsegundo
+u = Vp * square(2*pi*f*t);        % entrada cuadrada
+
+[y, t, x] = lsim(sys, u, t);      % simular respuesta con lsim
+
+figure;
+plot(t, x(:,2), 'LineWidth', 1.5);
+grid on;
+xlabel('Tiempo (s)');
+ylabel('Tension en el capacitor (V)');
+title('Respuesta real de la tensión en el capacitor');
