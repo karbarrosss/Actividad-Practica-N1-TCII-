@@ -1,0 +1,115 @@
+% nombre del archivo excel
+filename = 'Curvas_Medidas_RLC_2024.xlsx';
+
+% leer los nombres de las variables desde la hoja 2
+nombres_variables = readcell(filename, 'Sheet', 2);
+tiempo = nombres_variables{1};
+corriente = nombres_variables{2};
+tension_capacitor = nombres_variables{3};
+tension_entrada = nombres_variables{4};
+
+% leer los datos desde la hoja 1
+datos = readmatrix(filename, 'Sheet', 1);
+
+% asignar los datos a variables represetnativas
+tiempo_medido = datos(:, 1);
+corriente_medida = datos(:, 2);
+vc_medido = datos(:, 3);
+ve_medido = datos(:, 4); % entrada escalon
+
+% graficas de la tension en el capacitor y la tension de entrada
+%figure;
+%subplot(2, 1, 1);
+%plot(tiempo_medido, ve_medido);
+%title('Tensión de entrada');
+%xlabel(tiempo);
+%ylabel(tension_entrada);
+%grid on;
+%subplot(2, 1, 2);
+%plot(tiempo_medido, vc_medido);
+%title('Tensión medida en el capacitor');
+%xlabel(tiempo);
+%ylabel(tension_capacitor);
+%grid on;
+
+% Identificar el tiempo de inicio del escalón (aproximadamente 0.01 s)
+tiempo_escalon_inicio_idx = find(tiempo_medido >= 0.01, 1, 'first');
+
+if isempty(tiempo_escalon_inicio_idx)
+    error('No se encontró el tiempo de inicio del escalón.');
+end
+
+tiempo_ajuste = tiempo_medido(tiempo_escalon_inicio_idx:end) - tiempo_medido(tiempo_escalon_inicio_idx);
+vc_ajuste = vc_medido(tiempo_escalon_inicio_idx:end);
+ve_escalon = mean(ve_medido(tiempo_escalon_inicio_idx:end)); % Amplitud del escalón
+
+% Definir la función que simula la respuesta v_c(t) para un vector de parámetros p = [R, L, C]
+function vc_simulado = simular_vc_escalon(p, t, ve_escalon_local)
+    R = p(1);
+    L = p(2);
+    C = p(3);
+
+    if L <= 0 || C <= 0
+        vc_simulado = NaN(size(t)); % Devolver NaN si L o C no son positivos
+        return;
+    end
+
+    A = [-R/L, -1/L; 1/C, 0];
+    b = [1/L; 0];
+    c = [0, 1];
+    d = 0;
+
+    sistema = ss(A, b, c, d);
+    [y, ~, ~] = lsim(sistema, ve_escalon_local * ones(size(t)), t, [0; 0]);
+    vc_simulado = y;
+end
+
+% valores iniciales y limites para R, L, C
+parametros_iniciales = [50, 1e-6, 100e-9];
+limites_inferiores = [1, 1e-7, 1e-10];
+limites_superiores = [100, 1e-5, 1e-7];
+
+% ajuste de curvas usando lsqcurvefit
+options = optimoptions('lsqcurvefit', 'Display', 'iter');
+try
+    parametros_optimos = lsqcurvefit(@(p, t) simular_vc_escalon(p, t, ve_escalon), ...
+        parametros_iniciales, tiempo_ajuste, vc_ajuste, limites_inferiores, limites_superiores, options);
+
+    % obtener los valores optimos de R, L, C
+    R_optimizado = parametros_optimos(1);
+    L_optimizado = parametros_optimos(2);
+    C_optimizado = parametros_optimos(3);
+
+    fprintf('Valores de R, L, C optimizados:\n');
+    fprintf('R = %.2f Ohm\n', R_optimizado);
+    fprintf('L = %.2e H\n', L_optimizado);
+    fprintf('C = %.2e F\n', C_optimizado);
+
+    % simular la respuesta con los parametros optimizados
+    tiempo_sim_optimizado = 0:1e-7:0.01;
+    vc_simulado_optimizado = simular_vc_escalon(parametros_optimos, tiempo_sim_optimizado, ve_escalon);
+
+    % simular la respuesta con los valores del item 1
+    R_item1 = 47;
+    L_item1 = 1e-6;
+    C_item1 = 100e-9;
+    parametros_item1 = [R_item1, L_item1, C_item1];
+    vc_simulado_item1 = simular_vc_escalon(parametros_item1, tiempo_sim_optimizado, ve_escalon);
+
+    % graficar las curvas para comparar
+    figure;
+    %plot(tiempo_medido, vc_medido, 'k', 'DisplayName', 'Medido (Excel)');
+    hold on;
+    plot(tiempo_sim_optimizado + tiempo_medido(tiempo_escalon_inicio_idx), vc_simulado_optimizado, 'r--', 'DisplayName', 'Simulado (Optimizado)');
+    plot(tiempo_sim_optimizado + tiempo_medido(tiempo_escalon_inicio_idx), vc_simulado_item1, 'b-.', 'DisplayName', 'Simulado (Ítem 1)');
+    xlabel('Tiempo (s)');
+    ylabel('Tension en el capacitor (V)');
+    title('Comparacion de la tension en el capacitor');
+    legend('Location', 'best');
+    grid on;
+    hold off;
+
+catch ME
+    fprintf('Error durante la optimización: %s\n', ME.message);
+    % Puedes añadir más detalles del error si es necesario
+end
