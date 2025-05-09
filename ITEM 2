@@ -3,7 +3,7 @@ filename = 'Curvas_Medidas_RLC_2024.xlsx';
 data = readmatrix(filename, 'Sheet', 1);
 tiempo_medido = data(:, 1);
 vc_medido = data(:, 3);
-ve_medido = data(:, 4);
+ve_medido = data(:, 4); 
 
 % datos del item 1
 R1= 47;
