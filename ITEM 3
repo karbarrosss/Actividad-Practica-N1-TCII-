@@ -10,7 +10,7 @@ u = tabla(:, 4); %tension de entrada
 % pametros obtenidos del item 2
 R = 270; %ohms
 L = 0.00036786; % henrios
-c = 0.0026916; % faradios
+C = 0.0026916; % faradios
 
 % variables de estado
 A = [0, 1; 
