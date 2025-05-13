@@ -1,46 +1,88 @@
-% cargar los datos del excel
+clc; clear all; close all;
+
 filename = 'Curvas_Medidas_RLC_2024.xlsx';
-data = readmatrix(filename, 'Sheet', 1);
-tiempo_medido = data(:, 1);
-vc_medido = data(:, 3);
-ve_medido = data(:, 4); 
+tabla = readmatrix(filename, 'Sheet', 1);
+t_medido = tabla(:, 1); %tiempo medido
+i = tabla(:, 2); %corriente medida
+y = tabla(:, 3); %tension en el capacitor
+u = tabla(:, 4); %tension de entrada
 
-% datos del item 1
-R1= 47;
-L1 = 1e-6;
-C1 = 100e-9;
+Vp = 12; %tension maxima 12V
+f = 500; %frecuencia 500Hz
 
-% el sistema en espacio de estados
-A1 = [-R1/L1, -1/L1; 1/C1, 0];
-b1 = [1/L1; 0];
-c1 = [0, 1];
-d1 = 0;
-sistema1 = ss(A1, b1, c1, d1);
+ret = 0.01;
+t = .001;
 
-% simular la respuesta del sistema al voltaje de entrada cuadrada ve(t)
-[vc_item1, t1] = lsim(sistema1, ve_medido, tiempo_medido, [0; 0]);
+[val lugar] =min(abs(t+ret-t_medido)); %busco en ret+t1
+y_t1=y(lugar);
+t1=t_medido(lugar); %t1
 
-% graficar la tension de entrada ve(t) y la tension en el capacitor (medida azul y simulada roja)
-figure;
-subplot(2, 1, 1);
-plot(tiempo_medido, ve_medido);
+[val lugar] =min(abs(2*t+ret-t_medido));
+y_t2=y(lugar);
+t2=t_medido(lugar); %t2
+
+[val lugar] =min(abs(3*t+ret-t_medido));
+y_t3=y(lugar);
+t3=t_medido(lugar); %t3
+
+subplot(2,1,1);
+plot(t_medido, y);
+hold; plot(t1,y_t1,'o',t2,y_t2,'o',t3,y_t3,'o')
+title ('Tension en el capacitor');
+grid on;
+
+subplot(2,1,2); 
+plot(t_medido,u)
 title('Tension de entrada');
-xlabel('Tiempo (s)');
-ylabel('Voltaje (V)');
 grid on;
 
-subplot(2, 1, 2);
-plot(tiempo_medido, vc_medido, 'b', 'DisplayName', 'Medido (Excel)');
+%k=y(00)/u
+k = 11.9999/12;
+
+%METODO DE CHEN
+%Funcion de la forma G(s)=K*(s+T3)/[(s+T1+1).(s+T2+1)] luego se puede
+%despreciar el cero
+k1      =       (1/Vp)*y_t1/k-1;
+k2      =       (1/Vp)*y_t2/k-1;
+k3      =       (1/Vp)*y_t3/k-1;
+b       =       4*k1^3*k3-3*k1^2*k2^2-4*k2^3+k3^2+6*k1*k2*k3;
+alfa1   =       (k1*k2+k3-sqrt(b))/(2*(k1^2+k2));
+alfa2   =       (k1*k2+k3+sqrt(b))/(2*(k1^2+k2));
+beta    =       (2*k1^3+3*k1*k2+k3-sqrt(b))/(sqrt(b));
+
+T1      =       (-t/log(alfa1));
+T2      =       (-t/log(alfa2));
+T3      =       real(beta*(T1-T2)+T1);
+
+sys_va=tf(k,conv([T1 1],[T2 1])); %funcion de transferencia
+
+[y1,t1,ent] = lsim(sys_va, u, t_medido, [0,0]);
+hfig1 = figure;
 hold on;
-plot(tiempo_medido, vc_item1, 'r', 'DisplayName', 'Simulado (Ítem 1)');
-title('Tension en el Capacitor');
-xlabel('Tiempo (s)');
-ylabel('Voltaje (V)');
-legend('Location', 'best');
+plot(tabla(:,1),tabla(:,3))
+plot(t_medido,y1,'-.r'); 
+title('Tensiones en el capacitor')
 grid on;
-hold off;
+legend('Datos','Modelado')
 
-catch ME
-    fprintf('Error durante la optimización: %s\n', ME.message);
-    % Puedes añadir más detalles del error si es necesario
-end
+
+%del grafico R = V/Imax = 270[ohm]
+
+%valor del inductor
+%L = sys_va.den{1}(1)/0.099020
+
+%valor del capacitor
+C = sys_va.den{1}(2)/270; %C=9.9628e-06[F]
+
+%Vc=(1/C)*integral(i)--> i=C*dVc/dt
+h=(t_medido(100)-t_medido(99));
+i_t=C*diff(y1)/h;
+L = i_t
+
+figure
+hold
+plot(tabla(:,1),tabla(:,2)) 
+plot(t_medido,[0;i_t],'-.r'); 
+title('Corrientes')
+grid on;
+legend('Datos','Modelado')
