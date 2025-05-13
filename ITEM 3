@@ -1,0 +1,39 @@
+clc; clear all; close all;
+
+filename = 'Curvas_Medidas_RLC_2024.xlsx';
+tabla = readmatrix(filename, 'Sheet', 1);
+t_medido = tabla(:, 1); %tiempo medido
+i = tabla(:, 2); %corriente medida
+y = tabla(:, 3); %tension en el capacitor
+u = tabla(:, 4); %tension de entrada
+
+% pametros obtenidos del item 2
+R = 270; %ohms
+L = 0.00036786; % henrios
+c = 0.0026916; % faradios
+
+% variables de estado
+A = [0, 1; 
+     -1/(L*c), -R/L];
+
+b = [0; 
+     1/L];
+
+c = [1, 0];
+d = 0;
+
+sys = ss(A, b, c, d); %espacio de estados
+
+[y_sim, t_sim, x_sim] = lsim(sys, y, t_medido); % simular la rta del sistema con la entrada medida y
+
+i_simulada = x_sim(:, 2); % la corriente en el inductor es la segunda variable de estado
+
+% graficas de las corrientes medida y simulada
+figure;
+plot(t_medido, i, 'b', 'LineWidth', 1.5); hold on; % corriente medida
+plot(t_sim, i_simulada, 'r', 'LineWidth', 1.5); % corriente simulada
+xlabel('Tiempo (s)');
+ylabel('Corriente (A)');
+title('Corrientes en el inductor');
+legend('Medida', 'Simulada');
+grid on;
